@@ -299,19 +299,19 @@ class XperienceUI {
 
     
     fillSegments(progress, child) {
-        const p = (ui.cfg.segments / 100) * progress;
+        const p = (this.cfg.segments / 100) * progress;
         const filled = Math.floor(p);
         const partial = p % 1;
 
-        for (let i = 0; i < ui.cfg.segments; i++) {
+        for (let i = 0; i < this.cfg.segments; i++) {
             if (i + 1 <= filled) {
-                ui.nodes.progress.children[i][child].style.width = "100%";
+                this.nodes.progress.children[i][child].style.width = "100%";
             } else {
-                ui.nodes.progress.children[i][child].style.width = "0%";
+                this.nodes.progress.children[i][child].style.width = "0%";
             }
 
             if (i + 1 === filled + 1) {
-                ui.nodes.progress.children[i][child].style.width = `${partial * 100}%`;
+                this.nodes.progress.children[i][child].style.width = `${partial * 100}%`;
             }
         }
     }

@@ -2,9 +2,9 @@ fx_version 'cerulean'
 
 game 'gta5'
 
-description 'Xperience - XP Ranking System for FiveM'
+description '经验系统 - 支持多主题、多框架集成的FiveM等级管理系统，提供完整的XP和等级功能'
 
-author 'Mobius1'
+author 'wusheng666'
 
 version '0.2.0'
 
