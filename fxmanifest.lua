@@ -2,11 +2,11 @@ fx_version 'cerulean'
 
 game 'gta5'
 
-description '经验系统 - 支持多主题、多框架集成的FiveM等级管理系统，提供完整的XP和等级功能'
+description 'Experience System - A FiveM level management system with multi-theme and multi-framework integration, providing complete XP and rank features'
 
 author 'wusheng666 和 Mobius1'
 
-version '0.2.0'
+version '0.3.5'
 
 shared_scripts {
     'config.lua',
@@ -17,7 +17,8 @@ shared_scripts {
 server_scripts {
     -- '@mysql-async/lib/MySQL.lua',
     '@oxmysql/lib/MySQL.lua',
-    'server/main.lua'
+    'server/main.lua',
+    'server/version_checker.lua'
 }
 
 client_scripts {
