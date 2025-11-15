@@ -1,8 +1,6 @@
 {
-    "version": "0.3.5",
+    "version": "0.3.6",
     "updateLog": [
-        "修复了等级系统的保存问题",
-        "优化了UI显示效果",
-        "增加了新的主题选项"
+        "Improved the GetPlayer function to fix the issue where pressing 'Z' wouldn't open the leaderboard. Thanks to KamuNanyakk (cfx forums) for the contribution."
     ]
 }

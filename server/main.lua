@@ -207,19 +207,19 @@ function Xperience:GetPlayerXPToRank(playerId, rank)
     return goalXP - currentXP
 end
 
+-- Get player identifier function
+-- Modified by: KamuNanyakk (cfx forum)
 function Xperience:GetPlayer(src)
-    for _, id in pairs(GetPlayerIdentifiers(src)) do
-        if string.sub(id, 1, string.len('license:')) == 'license:' then
-            if Config.UseESX and Config.ESXIdentifierColumn == 'license' then
-                return id
-            end
-
-            return string.sub(id, 9, string.len(id))
-        end
+    if Config.UseESX then 
+        local xPlayer = ESX.GetPlayerFromId(src) 
+        if xPlayer then 
+            return xPlayer.identifier --  return steam:xxxx 
+        end 
     end 
-    
-    return false
+
+    return false 
 end
+
 
 function Xperience:CheckRanks()
     local Limit = #Config.Ranks
