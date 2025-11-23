@@ -150,7 +150,11 @@ function Xperience:AddXP(xp)
         return
     end
 
-    self:SetData(xp)
+    -- Calculate new XP based on current XP instead of directly setting the increment value
+    local newXP = self:GetXP() + xp
+    newXP = self:LimitXP(newXP)
+    
+    self:SetData(newXP)
 
     SendNUIMessage({
         event = 'add',

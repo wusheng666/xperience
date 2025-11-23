@@ -17,24 +17,23 @@ function Xperience:Init()
         return
     end
 
-    if Config.UseQBCore and Config.UseESX then
-        return printError("You can't use QBCore and ESX together!")
-    end
-
-    if Config.UseQBCore then
+    -- Initialize framework based on Config.Framework
+    if Config.Framework == 'qbcore' then
         local status = GetResourceState('qb-core')
         if status ~= 'started' then
             return printError(string.format('QBCORE is %s!', status))
         end
 
         QBCore = exports['qb-core']:GetCoreObject()
-    elseif Config.UseESX then
+    elseif Config.Framework == 'esx' then
         local status = GetResourceState('es_extended')
         if status ~= 'started' then
             return printError(string.format('ESX is %s!', status))
         end
 
         ESX = exports['es_extended']:getSharedObject()
+    elseif Config.Framework ~= 'standalone' then
+        return printError(string.format('Invalid framework "%s"! Valid options are: qbcore, esx, standalone', Config.Framework))
     end
 
     self.ready = true
@@ -46,7 +45,7 @@ function Xperience:Load(src)
     if self.ready then
         local resp, result = false, false
 
-        if Config.UseQBCore then
+        if Config.Framework == 'qbcore' then
             local Player = QBCore.Functions.GetPlayer(src)
             if Player then
                 result = {}
@@ -58,7 +57,7 @@ function Xperience:Load(src)
         else
             local license = self:GetPlayer(src)
             
-            if Config.UseESX then
+            if Config.Framework == 'esx' then
                 local statement = 'SELECT * FROM users WHERE license = @license'
 
                 if Config.ESXIdentifierColumn == 'identifier' then
@@ -68,30 +67,79 @@ function Xperience:Load(src)
                 MySQL.Async.fetchAll(statement, { ['@license'] = license }, function(res)
                     if res[1] then
                         result = {}
-                        result.xp = tonumber(res[1].xp)
-                        result.rank = tonumber(res[1].rank)
+                        result.xp = tonumber(res[1].xp) or 0
+                        result.rank = tonumber(res[1].rank) or 1
 
                         local Player = ESX.GetPlayerFromId(src)
                         Player.set("xp", result.xp)
                         Player.set("rank", result.rank)
-
-                        resp = true
+                    else
+                        -- Create default values for new players
+                        result = {
+                            xp = 0,
+                            rank = 1
+                        }
+                        
+                        -- Insert default values for new player
+                        local insertStatement = 'INSERT INTO users (license, xp, rank) VALUES (@license, @xp, @rank)'
+                        if Config.ESXIdentifierColumn == 'identifier' then
+                            insertStatement = 'INSERT INTO users (identifier, xp, rank) VALUES (@license, @xp, @rank)'
+                        end
+                        
+                        MySQL.Async.execute(insertStatement, {
+                            ['@license'] = license,
+                            ['@xp'] = 0,
+                            ['@rank'] = 1
+                        })
+                        
+                        local Player = ESX.GetPlayerFromId(src)
+                        Player.set("xp", 0)
+                        Player.set("rank", 1)
                     end
+                    
+                    resp = true
                 end)
-            else
+            else -- Standalone mode
                 MySQL.Async.fetchAll('SELECT * FROM user_experience WHERE identifier = @license', { ['@license'] = license }, function(res)
                     if res[1] then
                         result = {}
-                        result.xp = tonumber(res[1].xp)
-                        result.rank = tonumber(res[1].rank)
-
-                        resp = true
+                        result.xp = tonumber(res[1].xp) or 0
+                        result.rank = tonumber(res[1].rank) or 1
+                    else
+                        -- Create default values for new players
+                        result = {
+                            xp = 0,
+                            rank = 1
+                        }
+                        
+                        -- Insert default values for new player
+                        MySQL.Async.execute('INSERT INTO user_experience (identifier, xp, rank) VALUES (@identifier, @xp, @rank)', {
+                            ['@identifier'] = license,
+                            ['@xp'] = 0,
+                            ['@rank'] = 1
+                        })
                     end
+                    
+                    resp = true
                 end)
             end
         end
 
-        while not resp do Wait(0) end
+        -- Add timeout to prevent infinite blocking
+        local timeout = 0
+        while not resp and timeout < 100 do 
+            Wait(100) 
+            timeout = timeout + 1
+        end
+        
+        -- If still not responding after timeout, set default values
+        if not resp then
+            result = {
+                xp = 0,
+                rank = 1
+            }
+            print(string.format("^1LOAD TIMEOUT FOR PLAYER: %s - Using default values^7", GetPlayerName(src)))
+        end
 
         if Config.Debug then
             print(string.format("^5LOADED DATA FOR PLAYER: %s (XP %s, Rank %s)^7", GetPlayerName(src), result.xp, result.rank))
@@ -102,7 +150,7 @@ function Xperience:Load(src)
 end
 
 function Xperience:Save(src, xp, rank)
-    if Config.UseQBCore then
+    if Config.Framework == 'qbcore' then
         local Player = QBCore.Functions.GetPlayer(src)
 
         Player.Functions.SetMetaData('xp', tonumber(xp))
@@ -110,7 +158,7 @@ function Xperience:Save(src, xp, rank)
         Player.Functions.Save()
     else
         local license = self:GetPlayer(src)
-        if Config.UseESX then
+        if Config.Framework == 'esx' then
             local Player = ESX.GetPlayerFromId(src)
 
             Player.set("xp", tonumber(xp))
@@ -123,14 +171,42 @@ function Xperience:Save(src, xp, rank)
             end
 
             MySQL.Async.execute(statement, { ['@xp'] = xp, ['@rank'] = rank, ['@license'] = license }, function(affectedRows)
-                if not affectedRows then
-                    printError('There was a problem saving the user\'s data!')
+                if not affectedRows or affectedRows == 0 then
+                    -- If no rows were affected, try to insert (for new players)
+                    local insertStatement = 'INSERT INTO users (license, xp, rank) VALUES (@license, @xp, @rank)'
+                    if Config.ESXIdentifierColumn == 'identifier' then
+                        insertStatement = 'INSERT INTO users (identifier, xp, rank) VALUES (@license, @xp, @rank)'
+                    end
+                    
+                    MySQL.Async.execute(insertStatement, { 
+                        ['@license'] = license, 
+                        ['@xp'] = xp, 
+                        ['@rank'] = rank 
+                    }, function(insertSuccess)
+                        if not insertSuccess then
+                            printError('There was a problem inserting the user\'s data!')
+                        end
+                    end)
                 end
             end)
-        else
-            MySQL.Async.execute('UPDATE user_experience SET xp = @xp, rank = @rank WHERE identifier = @identifier', { ['@xp'] = xp, ['@rank'] = rank, ['@identifier'] = license }, function(affectedRows)
+        else -- Standalone mode
+            -- For standalone mode, use INSERT ... ON DUPLICATE KEY UPDATE or try UPDATE then INSERT
+            MySQL.Async.execute('INSERT INTO user_experience (identifier, xp, rank) VALUES (@identifier, @xp, @rank) ON DUPLICATE KEY UPDATE xp = @xp, rank = @rank', 
+                { ['@identifier'] = license, ['@xp'] = xp, ['@rank'] = rank }, function(affectedRows)
                 if not affectedRows then
-                    printError('There was a problem saving the user\'s data!')
+                    -- If the above query fails, try the UPDATE then INSERT approach
+                    MySQL.Async.execute('UPDATE user_experience SET xp = @xp, rank = @rank WHERE identifier = @identifier', 
+                        { ['@xp'] = xp, ['@rank'] = rank, ['@identifier'] = license }, function(updateSuccess)
+                        if not updateSuccess or updateSuccess == 0 then
+                            -- If no rows were affected, try to insert (for new players)
+                            MySQL.Async.execute('INSERT INTO user_experience (identifier, xp, rank) VALUES (@identifier, @xp, @rank)', 
+                                { ['@identifier'] = license, ['@xp'] = xp, ['@rank'] = rank }, function(insertSuccess)
+                                if not insertSuccess then
+                                    printError('There was a problem inserting the user\'s data!')
+                                end
+                            end)
+                        end
+                    end)
                 end
             end)
         end
@@ -142,19 +218,19 @@ function Xperience:Save(src, xp, rank)
 end
 
 function Xperience:GetPlayerXP(playerId)
-    if Config.UseQBCore then
+    if Config.Framework == 'qbcore' then
         local Player = QBCore.Functions.GetPlayer(playerId)
 
         if Player then
             return Player.PlayerData.metadata.xp
         end
-    elseif Config.UseESX then
+    elseif Config.Framework == 'esx' then
         local Player = ESX.GetPlayerFromId(playerId)
 
         if Player then
             return tonumber(Player.get("xp"))
         end
-    else
+    else -- Standalone mode
         local license = self:GetPlayer(playerId)
         local xp = MySQL.Sync.fetchScalar('SELECT xp FROM user_experience WHERE identifier = @license', {['@license'] = license })
 
@@ -165,19 +241,19 @@ function Xperience:GetPlayerXP(playerId)
 end
 
 function Xperience:GetPlayerRank(playerId)
-    if Config.UseQBCore then
+    if Config.Framework == 'qbcore' then
         local Player = QBCore.Functions.GetPlayer(playerId)
 
         if Player then
             return Player.PlayerData.metadata.rank
         end
-    elseif Config.UseESX then
+    elseif Config.Framework == 'esx' then
         local Player = ESX.GetPlayerFromId(playerId)
     
         if Player then
             return tonumber(Player.get("rank"))
         end
-    else
+    else -- Standalone mode
         local license = self:GetPlayer(playerId)
         local rank = MySQL.Sync.fetchScalar('SELECT rank FROM user_experience WHERE identifier = @license', { ['@license'] = license })
     
@@ -188,6 +264,11 @@ end
 function Xperience:GetPlayerXPToNextRank(playerId)
     local currentXP = self:GetPlayerXP(playerId)
     local currentRank = self:GetPlayerRank(playerId)
+
+    -- Check if player is already at max rank
+    if currentRank == #Config.Ranks then
+        return 0
+    end
 
     return tonumber(Config.Ranks[currentRank + 1].XP) - tonumber(currentXP)   
 end
@@ -210,12 +291,24 @@ end
 -- Get player identifier function
 -- Modified by: KamuNanyakk (cfx forum)
 function Xperience:GetPlayer(src)
-    if Config.UseESX then 
+    if Config.Framework == 'esx' then 
         local xPlayer = ESX.GetPlayerFromId(src) 
         if xPlayer then 
             return xPlayer.identifier --  return steam:xxxx 
         end 
-    end 
+    elseif Config.Framework == 'qbcore' then
+        local Player = QBCore.Functions.GetPlayer(src)
+        if Player then
+            return Player.PlayerData.citizenid -- return QBCore citizenid
+        end
+    else -- Standalone mode
+        -- For standalone mode, get license identifier
+        for _, identifier in ipairs(GetPlayerIdentifiers(src)) do
+            if string.find(identifier, "license:") then
+                return identifier
+            end
+        end
+    end
 
     return false 
 end
@@ -243,13 +336,29 @@ function Xperience:RunCommand(src, type, args)
     local value = tonumber(args[2])
     
     if playerId ~= nil and value ~= nil then
-        local player = self:GetPlayer(playerId)
-    
-        if not player then
+        -- Check if player is online
+        local playerName = GetPlayerName(playerId)
+        if not playerName then
             return self:PrintError(src, 'Player is offline')
         end
-    
+        
+        -- For ESX mode, we need to check GetPlayer
+        -- For QBCore and Standalone modes, we already verified the player is online with GetPlayerName
+        if Config.Framework == 'esx' then
+            local player = self:GetPlayer(playerId)
+            if not player then
+                return self:PrintError(src, 'Player is offline')
+            end
+        end
+        
         TriggerClientEvent('xperience:client:' .. type, playerId, value)
+        
+        -- Notify admin that command was executed
+        if src ~= 0 then
+            self:Notify(src, string.format('Executed %s on %s with value %s', type, playerName, value), 'success')
+        end
+    else
+        return self:PrintError(src, 'Invalid arguments. Usage: /' .. type .. ' [playerId] [value]')
     end
 
     if Config.Debug then
@@ -260,9 +369,9 @@ function Xperience:RunCommand(src, type, args)
 end
 
 function Xperience:Notify(src, message, type)
-    if Config.UseQBCore then
+    if Config.Framework == 'qbcore' then
         TriggerClientEvent('QBCore:Notify', src, message, type)
-    elseif Config.UseESX then
+    elseif Config.Framework == 'esx' then
         TriggerClientEvent('esx:showNotification', src, message)
     end  
 end

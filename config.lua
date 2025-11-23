@@ -1,7 +1,11 @@
 Config = {}
 
 Config.Debug        = true     -- Prints debug info to the console
-
+-- Framework Configuration
+-- Options: 'qbcore', 'esx', 'standalone'
+Config.Framework    = 'standalone'
+-- ESX specific configuration
+Config.ESXIdentifierColumn = 'identifier'
 Config.Timeout      = 5000      -- Sets the time in ms that the XP bar is displayed before fading out
 Config.UIKey        = 'z'       -- The key that toggles the UI - default is "z"
 Config.Theme        = 'native'  -- Set the default theme
@@ -22,8 +26,3 @@ Config.Themes = {
         width = 400
     },
 }
-
-Config.UseQBCore    = false
-Config.UseESX       = false
-
-Config.ESXIdentifierColumn = 'identifier'

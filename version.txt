@@ -1,6 +1,12 @@
 {
-    "version": "0.3.6",
+    "version": "0.4.0",
     "updateLog": [
-        "Improved the GetPlayer function to fix the issue where pressing 'Z' wouldn't open the leaderboard. Thanks to KamuNanyakk (cfx forums) for the contribution."
+        "Unified framework configuration with a single Config.Framework option",
+        "Fixed AddXP function to properly calculate cumulative XP values",
+        "Added max rank protection to prevent nil errors",
+        "Improved identifier retrieval for all framework modes",
+        "Fixed Load function timeout issues with default value handling",
+        "Enhanced Save function with proper INSERT/UPSERT logic",
+        "Resolved admin command offline detection for QBCore/Standalone modes"
     ]
 }

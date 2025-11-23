@@ -6,7 +6,7 @@ description 'Experience System - A FiveM level management system with multi-them
 
 author 'wusheng666 和 Mobius1'
 
-version '0.3.5'
+version '0.4.0'
 
 shared_scripts {
     'config.lua',
